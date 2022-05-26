@@ -52,7 +52,7 @@ class BanditProblem {
         }
     }
 
-    void run(){
+    void run(std::vector<double> avg_reward, std::vector<double> avg_optimal_action){
         // Run the problem for specifed number of iterations.
         int a; // the action chosen at timestep t.
         double r; // the reward for choosing action a at timestep t.
@@ -90,11 +90,17 @@ class BanditProblem {
 int main(){
 
     // Number of experiments to perform.
-    const int n_experiments = 1000;
-
+    const int n_experiments = 2000;
+    const int timesteps = 1000;
     // Run a single bandit problem.
-    BanditProblem test_bandit = BanditProblem(10, 0.1, 1000);
+    BanditProblem test_bandit = BanditProblem(10, 0.1, timesteps);
+    // Input a reference to results vectors to be updated.
+    std::vector<double> avg_reward, avg_optimal_action;
+    avg_reward.assign(timesteps,0);
+    avg_optimal_action(timesteps,0);
+    // Run bandit trials.
     test_bandit.test();
+    test_bandit.run(avg_reward, avg_optimal_action);
 
     return 0;
 }
