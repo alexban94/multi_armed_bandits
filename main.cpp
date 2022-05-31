@@ -2,6 +2,13 @@
 #include <random>
 #include <algorithm> // max_element
 #include <cmath> // abs
+#include <vector>
+
+
+struct BanditResults {
+        std::vector<double> optimal_action;
+        std::vector<double> reward_log;
+    };
 
 class BanditProblem {
     private:
@@ -11,11 +18,12 @@ class BanditProblem {
         std::vector<int> n;
 
         std::default_random_engine generator;
+        std::vector<std::normal_distribution<double>> reward_distributions;
 
     public:
     
     // Constructor.
-    BanditProblem(int k, double epsilon, int iterations){
+    BanditProblem(int k, double epsilon, int iterations, unsigned int seed = 0){
         this->k = k;
         this->iterations = iterations;
         this->epsilon = epsilon;
@@ -27,14 +35,13 @@ class BanditProblem {
         /* For this problem, each action a from 1 to k has an expected reward q*(a) =  E[R_t | A_t = a].
         R_t is the reward at timestep t, and A_t is the action taken at that timestep. To emulate a problem,
         q*(a) can be sampled from the Normal distrubtion. */
-        
+        generator.seed(seed);
         std::normal_distribution<double> distribution(0, 1);
         q_a.assign(k, 0);
         for(int i=0; i<k; i++){
-            q_a[i] = std::abs(distribution(generator));
-            std::cout<<q_a[i]<<std::endl;
-        }
-        
+            q_a[i] = distribution(generator);
+            reward_distributions.push_back(std::normal_distribution<double>{q_a[i], 1});
+        }        
 
     }
 
@@ -57,13 +64,16 @@ class BanditProblem {
         }
     }
 
-    void run(std::vector<double> &avg_reward, std::vector<double> &avg_optimal_action){
+    BanditResults run(){
         // Run the problem for specifed number of iterations.
         int a = 0; // the action chosen at timestep t.
         int best_a = 0; // the best possible action chosen at timestep t.
         double r[k] = {0}; // the rewards for choosing action a at timestep t.
 
         // Statistics for evaluation.
+        std::vector<double> reward_log(iterations, 0);
+        std::vector<double>  optimal_action(iterations, 0);
+
         bool optimal_a[iterations] = {false}; // True if the optimal action was taken at timestep t.
         double reward_at_t[iterations] = {0};
 
@@ -75,24 +85,47 @@ class BanditProblem {
         int count_random = 0;
         int count_chosen = 0;
 
+        // Testing intial values:
+        /* std::cout<<"Initial values:"<<std::endl;
+        for(int i=0; i<k;i++){
+            std::cout<<"r["<<i<<"] = "<<r[i]<<", q["<<i<<"] = "<<q[i] <<" ;"<<std::endl;
+        }
+        for(int i=0; i<k;i++){
+            std::cout<<"q_a["<<i<<"] = "<<q_a[i] <<" ;"<<std::endl;
+        }*/
+
         for(int t=0; t<iterations; t++){
+            //std::cout<<"Timestep: "<<t<<std::endl;
             // If probability < 1 - epsilon, use argmax Q(a) to select best action.
-            if(uniform_explore(generator) < 1 - epsilon){
+            if(uniform_explore(generator) < 1 - epsilon && t > 0){
+                //std::cout<<"Selected"<<std::endl;
                 a = std::distance(q.begin(), std::max_element(q.begin(), q.end()));
                 count_chosen += 1;
 
             } else {
                 // Select a random action.
+                //std::cout<<"Random"<<std::endl;
                 a = uniform_int(generator);
                 count_random += 1;
             }
+
+            //for(int i=0; i < q.size(); i++)
+                //std::cout<<"q["<<i<<"] = "<<q[i] <<" ;";
+            //std::cout<<std::endl;
+
             // Obtain rewards for all actions at timestep t - for the purpose of evaluating whether the best action was taken.
             for(int i = 0; i < k; i++){
                 r[i] = bandit(i);
+               // std::cout<<"r["<<i<<"] = "<<r[i] <<" ;";
             }
+            //std::cout<<std::endl;
 
             // Find best action in r - the argmax.
             best_a = std::distance(r, std::max_element(r, r + k));
+            //DEBUG:
+            //std::cout<<"Action taken: "<<a<<" Reward: "<<r[a];
+            //std::cout<<" Optimal action: "<<best_a<<" Reward: "<<(*std::max_element(r, r + k))<<std::endl;
+
             // If best_a is equal to a, then the best action was selected.
             if(best_a == a){
                 optimal_a[t] = true;
@@ -100,38 +133,54 @@ class BanditProblem {
             // TODO: fix this.
             // Update avg_optimal_action using optimal a. This stores the current % accuracy the best action was taken at each t.
             if(t > 0){
-                avg_optimal_action[t] += ((double)std::accumulate(optimal_a, optimal_a + t, 0))/t; //  Sum from first element up to current element at time t. Divide by t for accuracy.
+                optimal_action[t] = ((double)std::accumulate(optimal_a, optimal_a + t, 0)) * 100/t; //  Sum from first element up to current element at time t. Divide by t for accuracy.
                 //std::cout<<"Test accumulate"<<std::endl;
                 //std::cout<<((double)std::accumulate(optimal_a, optimal_a + t, 0))/t<<std::endl;
             } else {
                 // Avoid division by 0 on first timestep. 
-                avg_optimal_action[t] += std::accumulate(optimal_a, optimal_a + t, 0);
+                optimal_action[t] = ((double) std::accumulate(optimal_a, optimal_a + t, 0)) * 100;
                 
             }
             // Add r[a] to avg_reward for this timestep t.
-            avg_reward[t] += r[a];
-            //std::cout << r[a];
+            reward_log[t] = r[a];
+            
 
             
             // Only the reward r[a] of the chosen action a is used in updating the corresponding N(a) and Q(a) on this timestep.
             // Update "step-size" parameter (1/n) for sample-average method of estimating action-values.
+            //std::cout<<"Before: N[a] = "<<n[a]<<" q[a] = "<<q[a];
             n[a] += 1;
-            q[a] = q[a] + ((1/n[a]) * (r[a] - q[a]));
+            //double r_minus_q, rq_divide_n, rqn_plus_q, one_over_n = 0;
+            //r_minus_q = r[a] - q[a];
+            //one_over_n = 1.0/n[a];
+            //rq_divide_n = r_minus_q * one_over_n;
+            //rqn_plus_q = q[a] + rq_divide_n;
+            //std::cout<<"r[a] - q[a] = "<<r_minus_q<<std::endl;
+            //std::cout<<"1/n[a] = "<<one_over_n<<std::endl;
+            //std::cout<<"1/n[a] * (r[a] - q[a]) = "<<rq_divide_n<<std::endl;
+            //std::cout<<"q[a] +     1/n[a] * (r[a] - q[a]) = "<<rqn_plus_q<<std::endl;
 
+            q[a] = q[a] + ((1.0/n[a]) * (r[a] - q[a]));
+            //std::cout<<" After: N[a] = "<<n[a]<<" q[a] = "<<q[a]<<std::endl<<std::endl;
         }
+        
         std::cout<<"Total correct actions taken: "<<std::accumulate(optimal_a, optimal_a + iterations, 0)<<std::endl;
         std::cout<<"Epsilon: "<<epsilon<<" Iterations: "<<iterations<<std::endl;
         std::cout<<"Total actions selected: "<<count_chosen<<std::endl;
         std::cout<<"Total random actions taken: "<<count_random<<std::endl;
         
-
+        BanditResults result;
+        result.optimal_action = optimal_action;
+        result.reward_log = reward_log;
+        return result;
         
     }
 
     double bandit(int action){
         // Sample from a normal distribution with mean = q*(a) for the chosen action a, to obtain reward for this step.
-        std::normal_distribution<double> distribution(q_a[action], 1);
-        return (double) std::abs(distribution(generator));
+        //std::normal_distribution<double> distribution(q_a[action], 1);
+        //return (double) distribution(generator);
+        return reward_distributions[action](generator);
     }
 
 };
@@ -142,7 +191,7 @@ void print_stats(std::vector<double> &avg_reward, std::vector<double> &avg_optim
         std::cout <<i<<": "<<avg_reward.at(i) <<std::endl;
     std::cout<<"Average optimal action accuracy over 1000 timesteps:"<< std::endl;
     for(int i=0; i < avg_optimal_action.size(); i++)
-        std::cout <<i<<": "<<avg_optimal_action.at(i) <<std::endl;
+        std::cout <<i<<": "<<avg_optimal_action.at(i) <<"\%"<<std::endl;
 }
 
 int main(){
@@ -150,19 +199,38 @@ int main(){
     // Number of experiments to perform.
     const int n_experiments = 2000;
     const int timesteps = 1000;
+
+
     // Run a single bandit problem.
     BanditProblem test_bandit = BanditProblem(10, 0.1, timesteps);
-    // Input a reference to results vectors to be updated.
-    std::vector<double> avg_reward, avg_optimal_action;
-    avg_reward.assign(timesteps,0);
-    avg_optimal_action.assign(timesteps,0);
-    // Run bandit trials.
-    test_bandit.run(avg_reward, avg_optimal_action);
-
+    BanditResults test_result = test_bandit.run();
     // Print out statistics.
-    //print_stats(avg_reward, avg_optimal_action);
+    //print_stats(test_result.reward_log, test_result.optimal_action);
 
+    // Vectors to tally average results.
+    std::vector<double> avg_reward(timesteps,0), avg_optimal_action(timesteps,0);
+    
+    BanditResults result;
+    // Run bandit trials.
+    for(int n=0; n<n_experiments; n++){
+        std::cout<<"Trial "<<n<<std::endl;
+        result = BanditProblem(10, 0.1, timesteps, n).run();
+        // Add current results to the total.
+        for(int i=0; i<timesteps; i++){
+            avg_optimal_action[i] += result.optimal_action[i];
+            avg_reward[i] += result.reward_log[i];
+        }
+    }
+    // Average results by dividing by n_experiments.
+    // First two parameters give the range of elements to transform.
+    // Third parameter is the intial iterator to where to store values after transform.
+    // Fourth is the lambda function: takes n_experiments as a "captured" variable from the enclosing scope;
+    // takes a double  reference as a parameter (each vector element). Followed by the function, returning the division.
+    transform(avg_optimal_action.begin(), avg_optimal_action.end(), avg_optimal_action.begin(), [n_experiments](double &c){ return c/n_experiments; });
+    transform(avg_reward.begin(), avg_reward.end(), avg_reward.begin(), [n_experiments](double &c){ return c/n_experiments; });
 
+    print_stats(avg_reward, avg_optimal_action);
+    
     return 0; 
 }
 
