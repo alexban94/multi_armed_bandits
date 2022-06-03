@@ -4,22 +4,23 @@
 #include <cmath> // abs
 #include <vector>
 
+using namespace std;
 
 struct BanditResults {
         double epsilon;
-        std::vector<double> optimal_action;
-        std::vector<double> reward_log;
+        vector<double> optimal_action;
+        vector<double> reward_log;
     };
 
 class BanditProblem {
     private:
         int iterations, t, k;
         double epsilon;
-        std::vector<double> q, q_a;
-        std::vector<int> n;
+        vector<double> q, q_a;
+        vector<int> n;
 
-        std::default_random_engine generator;
-        std::vector<std::normal_distribution<double>> reward_distributions;
+        default_random_engine generator;
+        vector<normal_distribution<double>> reward_distributions;
 
     public:
     
@@ -37,11 +38,11 @@ class BanditProblem {
         R_t is the reward at timestep t, and A_t is the action taken at that timestep. To emulate a problem,
         q*(a) can be sampled from the Normal distrubtion. */
         generator.seed(seed);
-        std::normal_distribution<double> distribution(0, 1);
+        normal_distribution<double> distribution(0, 1);
         q_a.assign(k, 0);
         for(int i=0; i<k; i++){
             q_a[i] = distribution(generator);
-            reward_distributions.push_back(std::normal_distribution<double>{q_a[i], 1});
+            reward_distributions.push_back(normal_distribution<double>{q_a[i], 1});
         }        
 
     }
@@ -51,17 +52,17 @@ class BanditProblem {
             std::cout << "Iteration: " << t << "\n" << std::endl;
         }*/
         for(int i=0; i<k; i++){
-            std::cout << "a, n and q: " << i << " " << n[i] << " " << q[i] << std::endl;
+            cout << "a, n and q: " << i << " " << n[i] << " " << q[i] << std::endl;
         }
         for(int i=0; i<k; i++){
-            std::cout << "q*(a) values: a= " << i << " q*(a)=  " << q_a[i] << std::endl;
+            cout << "q*(a) values: a= " << i << " q*(a)=  " << q_a[i] << std::endl;
         } 
         // Check vector size.
-        std::cout << "Size of n: " << n.size() << " Size of q: " << q.size() << std::endl;
+        cout << "Size of n: " << n.size() << " Size of q: " << q.size() << std::endl;
 
         // Test bandit.
         for(t=0; t<iterations; t++){
-            std::cout << "Iteration: " << t << ", Action: 3, R_t = "<< bandit(0) << std::endl;
+            cout << "Iteration: " << t << ", Action: 3, R_t = "<< bandit(0) << std::endl;
         }
     }
 
@@ -72,16 +73,16 @@ class BanditProblem {
         double r[k] = {0}; // the rewards for choosing action a at timestep t.
 
         // Statistics for evaluation.
-        std::vector<double> reward_log(iterations, 0);
-        std::vector<double>  optimal_action(iterations, 0);
+        vector<double> reward_log(iterations, 0);
+        vector<double>  optimal_action(iterations, 0);
 
         bool optimal_a[iterations] = {false}; // True if the optimal action was taken at timestep t.
         double reward_at_t[iterations] = {0};
 
         // Uniform distribution for chance of exploration.
-        std::uniform_real_distribution<double> uniform_explore(0,1);
+        uniform_real_distribution<double> uniform_explore(0,1);
         // Uniform distribution for selecting a random action.
-        std::uniform_int_distribution<int> uniform_int(0, k-1); // a <= sample <= b, so need to sample up to k-1.
+        uniform_int_distribution<int> uniform_int(0, k-1); // a <= sample <= b, so need to sample up to k-1.
 
         int count_random = 0;
         int count_chosen = 0;
@@ -100,7 +101,7 @@ class BanditProblem {
             // If probability < 1 - epsilon, use argmax Q(a) to select best action.
             if(uniform_explore(generator) < 1.0 - epsilon && t > 0){
                 //std::cout<<"Selected"<<std::endl;
-                a = std::distance(q.begin(), std::max_element(q.begin(), q.end()));
+                a = distance(q.begin(), max_element(q.begin(), q.end()));
                 count_chosen += 1;
 
             } else {
@@ -122,7 +123,7 @@ class BanditProblem {
             //std::cout<<std::endl;
 
             // Find best action in r - the argmax.
-            best_a = std::distance(r, std::max_element(r, r + k));
+            best_a = distance(r, max_element(r, r + k));
             //DEBUG:
             //std::cout<<"Action taken: "<<a<<" Reward: "<<r[a];
             //std::cout<<" Optimal action: "<<best_a<<" Reward: "<<(*std::max_element(r, r + k))<<std::endl;
@@ -134,12 +135,12 @@ class BanditProblem {
             // TODO: fix this.
             // Update avg_optimal_action using optimal a. This stores the current % accuracy the best action was taken at each t.
             if(t > 0){
-                optimal_action[t] = ((double)std::accumulate(optimal_a, optimal_a + t, 0)) * 100/t; //  Sum from first element up to current element at time t. Divide by t for accuracy.
+                optimal_action[t] = ((double) accumulate(optimal_a, optimal_a + t, 0)) * 100/t; //  Sum from first element up to current element at time t. Divide by t for accuracy.
                 //std::cout<<"Test accumulate"<<std::endl;
                 //std::cout<<((double)std::accumulate(optimal_a, optimal_a + t, 0))/t<<std::endl;
             } else {
                 // Avoid division by 0 on first timestep. 
-                optimal_action[t] = ((double) std::accumulate(optimal_a, optimal_a + t, 0)) * 100;
+                optimal_action[t] = ((double) accumulate(optimal_a, optimal_a + t, 0)) * 100;
                 
             }
             // Add r[a] to avg_reward for this timestep t.
@@ -165,10 +166,10 @@ class BanditProblem {
             //std::cout<<" After: N[a] = "<<n[a]<<" q[a] = "<<q[a]<<std::endl<<std::endl;
         }
         
-        std::cout<<"Total correct actions taken: "<<std::accumulate(optimal_a, optimal_a + iterations, 0)<<std::endl;
-        std::cout<<"Epsilon: "<<epsilon<<" Iterations: "<<iterations<<std::endl;
-        std::cout<<"Total actions selected: "<<count_chosen<<std::endl;
-        std::cout<<"Total random actions taken: "<<count_random<<std::endl;
+        cout<<"Total correct actions taken: "<<accumulate(optimal_a, optimal_a + iterations, 0)<<endl;
+        cout<<"Epsilon: "<<epsilon<<" Iterations: "<<iterations<<endl;
+        cout<<"Total actions selected: "<<count_chosen<<endl;
+        cout<<"Total random actions taken: "<<count_random<<endl;
         
         BanditResults result;
         result.optimal_action = optimal_action;
@@ -187,39 +188,44 @@ class BanditProblem {
 
 };
 
-void print_stats(std::vector<double> &avg_reward, std::vector<double> &avg_optimal_action){
-    std::cout<<"Average reward over 1000 timesteps:"<< std::endl;
+void print_stats(vector<double> &avg_reward, vector<double> &avg_optimal_action){
+    cout<<"Average reward over 1000 timesteps:"<<endl;
     for(int i=0; i < avg_reward.size(); i++)
-        std::cout <<i<<": "<<avg_reward.at(i) <<std::endl;
-    std::cout<<"Average optimal action accuracy over 1000 timesteps:"<< std::endl;
+        cout <<i<<": "<<avg_reward.at(i) <<endl;
+
+    cout<<"Average optimal action accuracy over 1000 timesteps:"<<endl;
     for(int i=0; i < avg_optimal_action.size(); i++)
-        std::cout <<i<<": "<<avg_optimal_action.at(i) <<"\%"<<std::endl;
+        cout <<i<<": "<<avg_optimal_action.at(i) <<"\%"<<endl;
 }
 
 // Prints progress of averaged results every i iterations.
-void print_tabular(std::array<BanditResults> result_array, int interval=100, int timesteps, int n_experiments){
-   std::cout<<"Average reward over "<<n_experiments<<"runs using "<<timesteps<<" timesteps:"<<std::endl;
-   std::cout<<"----------------------------------------------"<<std::endl;
-   std::cout<<"timestep\t\t";
-   for(int i=0; i<result_array.size(); i++){
-      // Print columns using epsilon values.
-      std::cout<<"\t"<<result_array[i].epsilon;
-   }
-   
-   for(int i=0; i <= timesteps-1; i+interval){
-      std::cout<<"t=
-   }
+void print_tabular(vector<BanditResults> result_vector, int k, int interval=100, int timesteps=1000, int n_experiments=2000){
+    cout<<"Average reward over "<<n_experiments<<"runs using k = "<<k<<" and "<<timesteps<<" timesteps:"<<endl;
+    cout<<"----------------------------------------------"<<endl;
+    cout<<"timestep\t";
+    for(int i=0; i<result_vector.size(); i++){
+        // Print columns using epsilon values.
+        cout<<"\t"<<result_vector[i].epsilon;
+    }
+    // Print results of each test for current timestep.
+    for(int i=0; i <= timesteps-1; i+interval){
+        cout<<"  1  ";
+        for(int j=0; j<result_vector.size(), j++){
+            cout<<"\t"<<result_vector[j].reward_log[i];
+        }
+        cout<<endl;
+    }
 }
 
 // Runs all n_experiments and returns the averaged results.
 BanditResults run_experiment_config(int k, double epsilon, int timesteps, int n_experiments){
     // Vectors to tally average results.
-    std::vector<double> avg_reward(timesteps,0), avg_optimal_action(timesteps,0);
+    vector<double> avg_reward(timesteps,0), avg_optimal_action(timesteps,0);
     
     BanditResults result;
     // Run bandit trials.
     for(int n=0; n<n_experiments; n++){
-        std::cout<<"Trial "<<n<<std::endl;
+        //cout<<"Trial "<<n<<endl;
         result = BanditProblem(10, 0.1, timesteps, n).run();
         // Add current results to the total.
         for(int i=0; i<timesteps; i++){
@@ -248,24 +254,23 @@ int main(){
     // Number of experiments to perform.
     const int n_experiments = 2000;
     const int timesteps = 1000;
-
+    const int k = 10;
 
     // Run a single bandit problem.
-    BanditProblem test_bandit = BanditProblem(10, 0.1, timesteps);
-    BanditResults test_result = test_bandit.run();
+    //BanditProblem test_bandit = BanditProblem(k, 0.1, timesteps);
+    //BanditResults test_result = test_bandit.run();
     // Print out statistics.
     //print_stats(test_result.reward_log, test_result.optimal_action);
 
     // Peform trial experiments.
-    int k = 10;
     BanditResults greedy = run_experiment_config(k, 0, timesteps, n_experiments);
     BanditResults small_epsilon = run_experiment_config(k, 0.01, timesteps, n_experiments);
     BanditResults large_epsilon = run_experiment_config(k, 0.1, timesteps, n_experiments);
         
-    std::array<BanditResults> result_array = {greedy, small_epsilon, large_epsilon};    
-    print_tabular(result_array);
+    vector<BanditResults> result_vector = {greedy, small_epsilon, large_epsilon};    
+    print_tabular(result_vector, k, 100, timesteps, n_experiments);
     //print_stats(avg_reward, avg_optimal_action);
-    
+    cout<<"test";
     return 0; 
 }
 
